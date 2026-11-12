@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>대한사료 양돈 경영분석</title>
+<meta name="description" content="양돈농장 수익·비용 구조 분석과 MSY·돈가 시뮬레이션, 사료 컨설팅 보고서">
+<meta name="theme-color" content="#006241">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root {
+  color-scheme: light;
+  --bg:#f4f5f2; --surface:#fcfcfb; --surface-2:#eef0eb; --line:#dcdfd7;
+  --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#7a7974;
+  --ci:#006241; --brand:#006241; --brand-ink:#fff; --input:#fff8d6; --input-line:#e8d77a;
+  --s1:#2a78d6; --s2:#eb6834; --pos:#2a78d6; --neg:#e34948; --mid:#f0efec;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:#121211; --surface:#1a1a19; --surface-2:#242422; --line:#383835;
+    --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+    --brand:#2f9a6e; --input:#2b2716; --input-line:#5c5124;
+    --s1:#3987e5; --s2:#d95926; --pos:#3987e5; --neg:#e66767; --mid:#383835;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#121211; --surface:#1a1a19; --surface-2:#242422; --line:#383835;
+  --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+  --brand:#2f9a6e; --input:#2b2716; --input-line:#5c5124;
+  --s1:#3987e5; --s2:#d95926; --pos:#3987e5; --neg:#e66767; --mid:#383835;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif; -webkit-text-size-adjust:100%; }
+header.top { position:sticky; top:0; z-index:5; background:var(--ci); color:var(--brand-ink); padding:10px 16px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+header.top h1 { font-size:1.05rem; margin:0; white-space:nowrap; display:flex; align-items:center; gap:10px; }
+header.top h1 img { height:34px; width:auto; display:block; }
+header.top h1 span { padding-left:10px; border-left:1px solid rgba(255,255,255,.4); }
+.pr-head { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #006241; padding-bottom:6px; margin-bottom:6px; }
+.pr-head img { height:40px; }
+header.top select, header.top button { font:inherit; font-size:.9rem; }
+.farmbar { display:flex; gap:6px; align-items:center; margin-left:auto; flex-wrap:wrap; }
+.farmbar select { max-width:200px; padding:5px 8px; border-radius:6px; border:0; }
+.farmbar button { background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:6px; padding:5px 10px; cursor:pointer; }
+nav.tabs { display:flex; gap:4px; max-width:1180px; margin:0 auto; padding:12px 16px 0; }
+nav.tabs button { flex:1; font:inherit; padding:10px 8px; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); border-radius:8px 8px 0 0; cursor:pointer; }
+nav.tabs button[aria-selected="true"] { background:var(--brand); color:var(--brand-ink); border-color:var(--brand); font-weight:600; }
+nav.tabs .ic { display:none; }
+main { max-width:1180px; margin:0 auto; padding:0 16px 32px; }
+.panel { display:none; } .panel.on { display:block; }
+section.card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px; margin-top:14px; }
+h2 { font-size:1.05rem; margin:0 0 4px; } h3 { font-size:.95rem; margin:16px 0 8px; color:var(--ink-2); }
+.sub { color:var(--ink-3); font-size:.85rem; margin:0 0 12px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.btn { font:inherit; font-size:.9rem; padding:8px 12px; border-radius:8px; border:1px solid var(--brand); background:var(--brand); color:var(--brand-ink); cursor:pointer; }
+.btn.ghost { background:transparent; color:var(--brand); }
+.btn.sm { padding:4px 10px; font-size:.85rem; }
+label.f { display:flex; flex-direction:column; gap:3px; font-size:.85rem; color:var(--ink-2); }
+input.in, select.in { font:inherit; width:100%; padding:8px 10px; border:1px solid var(--input-line); background:var(--input); color:var(--ink); border-radius:6px; min-width:0; }
+input.in:focus, select.in:focus { outline:2px solid var(--s1); outline-offset:1px; }
+.grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); }
+.unit { color:var(--ink-3); font-size:.8rem; }
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px; }
+.chip { font:inherit; min-width:48px; padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink-2); cursor:pointer; position:relative; }
+.chip.on { background:var(--brand); color:var(--brand-ink); border-color:var(--brand); }
+.chip.filled::after { content:""; position:absolute; top:3px; right:5px; width:6px; height:6px; border-radius:50%; background:var(--good); }
+fieldset { border:1px solid var(--line); border-radius:8px; padding:10px 12px 12px; margin:10px 0 0; }
+legend { font-size:.85rem; font-weight:600; color:var(--ink-2); padding:0 4px; }
+.scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+table { border-collapse:collapse; width:100%; font-size:.88rem; }
+th, td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+th { color:var(--ink-2); font-weight:600; background:var(--surface-2); }
+th:first-child, td:first-child, td.l, th.l { text-align:left; }
+table.edit td { padding:2px; } table.edit input.in { padding:5px 6px; text-align:right; min-width:92px; font-size:.85rem; }
+table.edit td:first-child { position:sticky; left:0; background:var(--surface); z-index:1; padding:4px 8px; }
+.kpis { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+.kpi { background:var(--surface-2); border-radius:8px; padding:12px; }
+.kpi .k { font-size:.8rem; color:var(--ink-2); }
+.kpi .v { font-size:1.25rem; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums; }
+.kpi .v small { font-size:.8rem; font-weight:500; color:var(--ink-3); }
+.kpi .d { font-size:.8rem; color:var(--ink-2); margin-top:2px; }
+.up { color:var(--good); } .down { color:var(--critical); }
+.neg { color:var(--neg); }
+.diag { display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+.dg { border:1px solid var(--line); border-left:4px solid var(--st); border-radius:8px; padding:10px 12px; }
+.dg .t { font-weight:600; display:flex; gap:6px; align-items:center; }
+.dg .ico { color:var(--st); font-weight:700; }
+.dg .m { font-size:.85rem; color:var(--ink-2); }
+.dg .src { font-size:.75rem; color:var(--ink-3); }
+.alerts { list-style:none; padding:0; margin:0; }
+.alerts li { display:flex; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:.9rem; }
+.alerts .tag { flex:none; font-size:.75rem; font-weight:700; padding:1px 8px; border-radius:999px; color:#111; background:var(--st); height:fit-content; }
+.chart { position:relative; height:260px; }
+.chart.short { height:220px; }
+.two { display:grid; gap:14px; grid-template-columns:1fr 1fr; }
+.heat td { text-align:center; } .heat td.tg { outline:2px solid var(--ink); outline-offset:-2px; font-weight:700; }
+.big { font-size:1.6rem; font-weight:800; font-variant-numeric:tabular-nums; }
+.note { font-size:.8rem; color:var(--ink-3); margin-top:10px; }
+.slider { width:100%; accent-color:var(--brand); }
+.print-only { display:none; }
+.toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:8px; font-size:.9rem; opacity:0; transition:opacity .2s; pointer-events:none; z-index:20; }
+.toast.on { opacity:1; }
+.vh { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+@media (max-width: 760px) {
+  body { font-size:14px; padding-bottom:calc(64px + env(safe-area-inset-bottom)); }
+  header.top { padding:8px 16px; padding-top:calc(8px + env(safe-area-inset-top)); }
+  .farmbar { margin-left:0; width:100%; } .farmbar select { flex:1; max-width:none; }
+  nav.tabs { position:fixed; bottom:0; left:0; right:0; z-index:6; background:var(--surface); border-top:1px solid var(--line); padding:4px 4px calc(4px + env(safe-area-inset-bottom)); gap:2px; }
+  nav.tabs button { border:0; border-radius:8px; padding:4px 2px; font-size:.72rem; display:flex; flex-direction:column; align-items:center; }
+  nav.tabs .ic { display:block; font-size:1.15rem; line-height:1.3; }
+  .two { grid-template-columns:1fr; }
+  .kpis { grid-template-columns:1fr 1fr; } .kpi .v { font-size:1.05rem; }
+  .grid { grid-template-columns:1fr 1fr; }
+  .desk-only { display:none !important; }
+}
+@media print {
+  @page { size:A4; margin:12mm; }
+  body { background:#fff; color:#000; font-size:11px; padding:0; }
+  header.top, nav.tabs, .no-print, #p-input, #p-target { display:none !important; }
+  .panel { display:block !important; }
+  .print-only { display:block; }
+  section.card { border:1px solid #bbb; break-inside:avoid; margin-top:8px; padding:10px; }
+  .chart { height:200px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1><img src="ci_white.png" alt="대한사료"><span>양돈 경영분석</span></h1>
+  <div class="farmbar">
+    <label class="vh" for="farmSel">농장 선택</label>
+    <select id="farmSel"></select>
+    <button id="farmNew" type="button">+ 새 농장</button>
+    <button id="farmDel" type="button">삭제</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="input" aria-selected="true"><span class="ic">✎</span>① 농장 입력</button>
+  <button role="tab" data-tab="target"><span class="ic">🎯</span>② 목표 설정</button>
+  <button role="tab" data-tab="result"><span class="ic">📊</span>③ 분석 결과</button>
+  <button role="tab" data-tab="feed"><span class="ic">🌾</span>④ 사료 컨설팅</button>
+</nav>
+
+<main>
+<div class="print-only">
+  <div class="pr-head"><div><h2 id="prTitle"></h2><p class="sub" id="prSub" style="margin:0"></p></div><img src="ci.png" alt="대한사료"></div>
+</div>
+
+<!-- ① 입력 -->
+<div class="panel on" id="p-input" role="tabpanel">
+  <section class="card">
+    <h2>농장 정보</h2>
+    <p class="sub">노란 칸에 입력하세요. 입력 내용은 이 기기에 자동 저장됩니다.</p>
+    <div class="grid">
+      <label class="f">농장명<input class="in" data-k="farm"></label>
+      <label class="f">분석 연도<input class="in" data-k="year" type="number" inputmode="numeric"></label>
+      <label class="f">지육율 (%)<input class="in" data-k="yieldPct" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">담당 컨설턴트<input class="in" data-k="consultant" placeholder="보고서에 표시"></label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="btn ghost">📂 엑셀 불러오기<input type="file" id="xlsx" accept=".xlsx,.xlsm,.xls" hidden></label>
+      <button class="btn ghost" id="loadSample" type="button">예시 데이터 채우기</button>
+      <button class="btn ghost" id="expJson" type="button">백업 저장</button>
+      <label class="btn ghost">백업 복원<input type="file" id="impJson" accept=".json" hidden></label>
+    </div>
+    <p class="note">엑셀 불러오기: 기존 「양돈농장 수익 비용구조 시뮬레이션」 엑셀 파일의 노란 셀(1. 기초입력·2. 시뮬레이션·1-2. 사료구간)을 그대로 읽어 새 농장으로 추가합니다.</p>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2>월별 실적</h2>
+      <div class="row desk-only">
+        <button class="btn sm" id="viewMonth" type="button">월별 입력</button>
+        <button class="btn sm ghost" id="viewTable" type="button">표 입력 (12개월)</button>
+      </div>
+    </div>
+    <div id="monthView">
+      <div class="chips" id="chips" role="group" aria-label="월 선택"></div>
+      <div class="row" style="margin:6px 0"><button class="btn sm ghost" id="copyPrev" type="button">↳ 전월 값 복사</button><span class="unit" id="monthQuick"></span></div>
+      <div id="monthFields"></div>
+    </div>
+    <div id="tableView" class="scroll" hidden></div>
+  </section>
+</div>
+
+<!-- ② 목표 -->
+<div class="panel" id="p-target" role="tabpanel">
+  <section class="card">
+    <h2>현재 기준값 <span class="unit">(월별 실적에서 자동 계산)</span></h2>
+    <div class="kpis" id="baseKpis"></div>
+  </section>
+  <section class="card">
+    <h2>목표 시나리오</h2>
+    <p class="sub">목표 MSY와 예상 돈가를 넣으면 손익 변화를 바로 계산합니다.</p>
+    <div class="two">
+      <div>
+        <label class="f">목표 MSY (두/모돈/년)<input class="in" data-s="msy" type="number" inputmode="decimal" step="0.1"></label>
+        <input class="slider" type="range" min="15" max="35" step="0.1" data-s="msy" aria-label="목표 MSY 슬라이더">
+      </div>
+      <div>
+        <label class="f">예상 돈가 (원/kg, 지육)<input class="in" data-s="price" type="number" inputmode="numeric" step="10"></label>
+        <input class="slider" type="range" min="3000" max="8000" step="10" data-s="price" aria-label="예상 돈가 슬라이더">
+      </div>
+    </div>
+    <div class="kpis" id="quickKpis" style="margin-top:14px"></div>
+    <h3>민감도표 범위</h3>
+    <div class="grid">
+      <label class="f">시작 MSY<input class="in" data-s="msyMin" type="number" step="0.5"></label>
+      <label class="f">MSY 간격<input class="in" data-s="msyStep" type="number" step="0.5"></label>
+      <label class="f">시작 돈가<input class="in" data-s="priceMin" type="number" step="100"></label>
+      <label class="f">돈가 간격<input class="in" data-s="priceStep" type="number" step="50"></label>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn" data-go="result" type="button">분석 결과 보기 →</button></div>
+  </section>
+</div>
+
+<!-- ③ 결과 -->
+<div class="panel" id="p-result" role="tabpanel">
+  <div class="row no-print" style="margin-top:14px; justify-content:flex-end">
+    <button class="btn" id="printBtn" type="button">🖨 보고서 인쇄 / PDF</button>
+  </div>
+  <div id="resultBody"></div>
+</div>
+
+<!-- ④ 사료 -->
+<div class="panel" id="p-feed" role="tabpanel">
+  <section class="card">
+    <h2>사료 전환 효과 시뮬레이터</h2>
+    <p class="sub">제안 사료로 바꿀 때 단가가 올라도 FCR·MSY·출하체중 개선으로 이익이 나는지 계산합니다 (목표 시나리오 기준, 연간).</p>
+    <div class="grid no-print">
+      <label class="f">사료단가 변화 (원/kg)<input class="in" data-w="dPrice" type="number" inputmode="numeric" step="5"></label>
+      <label class="f">FCR 변화 (예: −0.1)<input class="in" data-w="dFcr" type="number" inputmode="decimal" step="0.01"></label>
+      <label class="f">MSY 변화 (두)<input class="in" data-w="dMsy" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">출하 생체중 변화 (kg)<input class="in" data-w="dWt" type="number" inputmode="decimal" step="0.5"></label>
+    </div>
+    <div id="switchOut" style="margin-top:14px"></div>
+  </section>
+  <section class="card">
+    <h2>구간별 사료 사용량·사료비</h2>
+    <p class="sub">최근 3개월 평균 사용량(톤)과 단가를 넣으면 사용 비율을 표준 비율과 비교합니다.</p>
+    <div class="scroll" id="stageTable"></div>
+    <div class="chart short" style="margin-top:12px"><canvas id="cStage" role="img" aria-label="구간별 사용 비율과 표준 비율 비교 막대 차트"></canvas></div>
+  </section>
+</div>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="calc.js"></script>
+<script src="sample.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

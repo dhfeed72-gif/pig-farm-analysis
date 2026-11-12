@@ -1,0 +1,15 @@
+{
+  "name": "대한사료 양돈 경영분석",
+  "short_name": "양돈경영분석",
+  "description": "양돈농장 수익·비용 구조 분석, MSY·돈가 시뮬레이션, 사료 컨설팅 보고서",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f2",
+  "theme_color": "#006241",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
