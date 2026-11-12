@@ -1,7 +1,7 @@
 /* 양돈 경영분석 — 화면 로직. 계산은 calc.js(엑셀 수식 이식)에서. */
 (() => {
 'use strict';
-const { analyze, feedSwitch, feedStages, alerts, fmt } = window.Calc;
+const { analyze, fromMonths, DEFAULT_BASE, DEFAULT_COST, feedSwitch, feedStages, alerts, fmt } = window.Calc;
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = v => (v === '' || v == null || !isFinite(+v) ? null : +v);
@@ -22,7 +22,8 @@ const blankFarm = name => ({
   id: 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
   farm: name || '새 농장', year: new Date().getFullYear(), yieldRate: 0.77, consultant: '',
   months: Object.fromEntries(FIELDS.map(f => [f[0], Array(12).fill(null)])),
-  sim: { msy: null, price: null, msyMin: 22, msyStep: 1, priceMin: 5500, priceStep: 100 },
+  sim: { ...window.SAMPLE.sim },
+  base: { ...DEFAULT_BASE }, cost: { ...DEFAULT_COST }, baseSrc: '엑셀 기본값',
   feedStages: window.SAMPLE.feedStages.map(s => ({ ...s, ton: 0, price: 0, product: '' })),
   sw: { dPrice: 20, dFcr: -0.15, dMsy: 0, dWt: 0 },
 });
@@ -31,6 +32,11 @@ const normalize = f => {
   const out = { ...b, ...f, sim: { ...b.sim, ...f.sim }, sw: { ...b.sw, ...f.sw }, months: { ...b.months } };
   for (const [k] of FIELDS) out.months[k] = Array.from({ length: 12 }, (_, i) => num(f.months?.[k]?.[i]));
   if (!Array.isArray(f.feedStages) || !f.feedStages.length) out.feedStages = b.feedStages;
+  if (!f.base) { // 이전 버전 데이터: 월별 실적이 있으면 그것으로 기본값 산출
+    const D = fromMonths(out);
+    if (D) Object.assign(out, D, { baseSrc: '월별 실적' });
+  }
+  out.base = { ...DEFAULT_BASE, ...out.base }; out.cost = { ...DEFAULT_COST, ...out.cost };
   return out;
 };
 let db;
@@ -45,7 +51,7 @@ const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { db.cu
 const toast = t => { const el = $('#toast'); el.textContent = t; el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 2200); };
 
 // ---------- 상태 ----------
-let A = null, month = 0, tab = 'input';
+let A = null, month = 0, tab = 'basic';
 const recompute = () => { A = analyze(farm); };
 
 // ---------- 농장 선택 ----------
@@ -54,7 +60,7 @@ function renderFarmSel() {
 }
 const switchFarm = id => { farm = db.farms.find(f => f.id === id) || db.farms[0]; save(); renderAll(); };
 $('#farmSel').onchange = e => switchFarm(e.target.value);
-$('#farmNew').onclick = () => { const n = prompt('새 농장 이름', ''); if (n == null) return; const f = blankFarm(n.trim() || '새 농장'); db.farms.push(f); switchFarm(f.id); go('input'); };
+$('#farmNew').onclick = () => { const n = prompt('새 농장 이름', ''); if (n == null) return; const f = blankFarm(n.trim() || '새 농장'); db.farms.push(f); switchFarm(f.id); go('basic'); };
 $('#farmDel').onclick = () => {
   if (!confirm(`「${farm.farm}」 농장 데이터를 삭제할까요? 되돌릴 수 없습니다. (필요하면 먼저 백업 저장)`)) return;
   db.farms = db.farms.filter(f => f !== farm);
@@ -72,7 +78,7 @@ function go(t) {
 $$('nav.tabs button').forEach(b => (b.onclick = () => go(b.dataset.tab)));
 document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
 
-// ---------- ① 입력 ----------
+// ---------- ④ 월별 실적 ----------
 function renderInfo() {
   $$('[data-k]').forEach(el => { const k = el.dataset.k; el.value = k === 'yieldPct' ? +(farm.yieldRate * 100).toFixed(2) : farm[k] ?? ''; });
 }
@@ -119,32 +125,31 @@ document.addEventListener('input', e => {
     farm.months[d.mk][+d.mi] = num(el.value);
     const s = $(`[data-sum="${d.mk}"]`); if (s && d.mk !== 'price') s.textContent = fmt(farm.months[d.mk].reduce((a, b) => a + (b || 0), 0));
   }
-  else if (d.s) { farm.sim[d.s] = num(el.value); $$(`[data-s="${d.s}"]`).forEach(o => o !== el && (o.value = el.value)); }
+  else if (d.s) farm.sim[d.s] = num(el.value);
+  else if (d.b) { if (d.b === 'yieldPct') farm.base.yieldRate = (num(el.value) ?? 0) / 100; else farm.base[d.b] = num(el.value); farm.baseSrc = '직접 수정'; }
+  else if (d.pc) { farm.cost[d.pc] = num(el.value) ?? 0; farm.baseSrc = '직접 수정'; }
   else if (d.w) farm.sw[d.w] = num(el.value) ?? 0;
   else if (d.st) { const [i, k] = d.st.split('.'); farm.feedStages[+i][k] = k === 'product' ? el.value : (k === 'std' ? (num(el.value) ?? 0) / 100 : num(el.value) ?? 0); }
   else return;
   save(); recompute();
-  if (tab === 'input') renderChips(); else renderVisible(el);
+  if (tab === 'month') renderChips(); else renderVisible(el);
 });
 
-// ---------- ② 목표 ----------
+// ---------- ① 기본 입력 ----------
 const kpi = (k, v, d = '', unit = '') => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}${unit ? ` <small>${unit}</small>` : ''}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
 const delta = (a, b, d = 0, unit = '', better = 1) => {
   const x = b - a; if (!isFinite(x) || Math.abs(x) < 10 ** -(d + 1)) return '변화 없음';
   const good = x * better > 0;
   return `<span class="${good ? 'up' : 'down'}">${good ? '▲' : '▼'} ${x > 0 ? '+' : ''}${fmt(x, d)}${unit}</span>`;
 };
-function renderTarget(active) {
-  const emptyMsg = '<p class="sub">① 농장 입력에서 월별 실적(최소 상시모돈·판매두수·판매체중·돈가·사료)을 먼저 입력하세요.</p>';
-  if (A.empty) { $('#baseKpis').innerHTML = emptyMsg; $('#quickKpis').innerHTML = ''; return; }
-  const b = A.base;
-  $('#baseKpis').innerHTML = [
-    kpi('상시 모돈수', fmt(b.sows, 1), '', '두'), kpi('MSY', fmt(b.msy, 1), '', '두/모돈/년'), kpi('평균 돈가', fmt(b.price), '', '원/kg'),
-    kpi('출하 생체중', fmt(b.liveWt, 1), '', 'kg/두'), kpi('지육율', fmt(b.yieldRate * 100, 1), '', '%'), kpi('FCR', fmt(b.fcr, 2)),
-    kpi('평균 사료단가', fmt(b.feedPrice), '', '원/kg'), kpi('분석 개월수', A.act.length, '', '개월'),
-  ].join('');
-  // 목표 입력칸: 비어 있으면 현재값 표시
-  $$('[data-s]').forEach(el => { if (el === active) return; const k = el.dataset.s; const v = farm.sim[k] ?? (k === 'msy' ? b.msy : k === 'price' ? b.price : ''); el.value = v; });
+const r2 = (v, d) => (v == null || v === '' ? '' : +(+v).toFixed(d));
+function renderBasic(active) {
+  const B = farm.base, C = farm.cost;
+  $$('[data-s]').forEach(el => { if (el !== active) el.value = r2(farm.sim[el.dataset.s], 2); });
+  $$('[data-b]').forEach(el => { if (el === active) return; const k = el.dataset.b; el.value = k === 'yieldPct' ? r2(B.yieldRate * 100, 2) : r2(B[k], k === 'price' || k === 'feedPrice' ? 0 : 2); });
+  $$('[data-pc]').forEach(el => { if (el !== active) el.value = r2(C[el.dataset.pc], 0); });
+  $('#baseSrc').textContent = `(출처: ${farm.baseSrc || '엑셀 기본값'})`;
+  if (A.empty) { $('#quickKpis').innerHTML = '<p class="sub">기본값의 상시 모돈수·기준 MSY·생체중·지육율을 확인하세요.</p>'; return; }
   const c = A.cur, t = A.tgt;
   $('#quickKpis').innerHTML = [
     kpi('연간 추정손익', `${mil(c.profit)} → ${mil(t.profit)}`, delta(c.profit / 1e6, t.profit / 1e6, 1, '백만원'), '백만원'),
@@ -153,6 +158,18 @@ function renderTarget(active) {
     kpi('손익분기 돈가', `${fmt(c.bep)} → ${fmt(t.bep)}`, delta(c.bep, t.bep, 0, '원', -1), '원/kg'),
   ].join('');
 }
+$('#resetBase').onclick = () => {
+  if (!confirm('기본값(회색 칸)을 엑셀 기본값으로 되돌릴까요?')) return;
+  Object.assign(farm, { base: { ...DEFAULT_BASE }, cost: { ...DEFAULT_COST }, baseSrc: '엑셀 기본값' });
+  save(); recompute(); renderBasic(); toast('엑셀 기본값으로 되돌렸습니다');
+};
+$('#applyMonths').onclick = () => {
+  const D = fromMonths(farm);
+  if (!D) return toast('월별 실적(상시모돈 등)을 먼저 입력하세요');
+  if (!confirm(`입력한 ${A.act.length}개월 실적으로 기본값(모돈수·MSY·돈가·생체중·FCR·사료단가·두당 비용)을 다시 계산할까요?`)) return;
+  Object.assign(farm, D, { baseSrc: `월별 실적 ${A.act.length}개월` });
+  save(); recompute(); toast('실적 기준으로 기본값을 계산했습니다'); go('basic');
+};
 
 // ---------- 차트 ----------
 const charts = {};
@@ -183,10 +200,10 @@ function diagItems() {
 }
 function renderResult() {
   const R = $('#resultBody');
-  if (A.empty) { R.innerHTML = '<section class="card"><p class="sub">① 농장 입력에서 월별 실적을 먼저 입력하세요.</p></section>'; return; }
+  if (A.empty) { R.innerHTML = '<section class="card"><p class="sub">① 기본 입력의 기본값(상시 모돈수·기준 MSY·생체중·지육율)을 확인하세요.</p></section>'; return; }
   const c = A.cur, t = A.tgt, b = A.base, ph = A.ph;
   $('#prTitle').textContent = `${farm.farm} 경영분석 보고서`;
-  $('#prSub').textContent = `${farm.year ?? ''}년 실적 기준 · 작성일 ${new Date().toLocaleDateString('ko-KR')}${farm.consultant ? ' · 담당 ' + farm.consultant : ''}`;
+  $('#prSub').textContent = `${A.act.length ? `${farm.year ?? ''}년 실적 기준` : '기본값 기준'} · 작성일 ${new Date().toLocaleDateString('ko-KR')}${farm.consultant ? ' · 담당 ' + farm.consultant : ''}`;
   const best = A.levers[0];
   const al = alerts(A);
   const lossMonths = A.act.filter(r => r.net < 0).map(r => r.month + '월');
@@ -256,7 +273,7 @@ function renderResult() {
       <tr><th class="l">합계</th><th></th><th>${fmt(totPH)}</th><th>${mil(totPH * c.heads)}</th><th>100%</th></tr></table></div>
   </section>
 
-  <section class="card">
+${A.act.length ? `  <section class="card">
     <h2>월별 추이</h2>
     <p class="sub">${lossMonths.length ? `적자 월: <b class="neg">${lossMonths.join(', ')}</b>` : '모든 달 흑자'} · 연간 누적 순손익 ${mil(A.act.at(-1).cum)}백만원</p>
     <div class="two">
@@ -275,6 +292,7 @@ function renderResult() {
     <h2>점검이 필요한 달</h2>
     ${al.length ? `<ul class="alerts">${al.map(a => `<li style="--st:var(--${a.lv})"><span class="tag">${a.m}월 ${a.lv === 'critical' ? '✖ 적자' : '▲ 주의'}</span><span>${esc(a.t)}</span></li>`).join('')}</ul>` : '<p class="sub">✔ 특이 사항 없음</p>'}
   </section>
+` : '<section class="card"><h2>월별 추이</h2><p class="sub">④ 월별 실적을 입력하면 월별 추이·적자 월·점검이 필요한 달이 여기에 추가됩니다.</p></section>'}
 
   <section class="card">
     <h2>MSY × 돈가 민감도 <span class="unit">연간 추정손익, 백만원</span></h2>
@@ -309,7 +327,7 @@ function renderResult() {
 function renderFeed(active) {
   $$('[data-w]').forEach(el => { if (el !== active) el.value = farm.sw[el.dataset.w] ?? 0; });
   const out = $('#switchOut');
-  if (A.empty) out.innerHTML = '<p class="sub">① 농장 입력에서 월별 실적을 먼저 입력하세요.</p>';
+  if (A.empty) out.innerHTML = '<p class="sub">① 기본 입력의 기본값(상시 모돈수·기준 MSY·생체중·지육율)을 확인하세요.</p>';
   else {
     const S = feedSwitch(A, farm.sw), w = farm.sw, b = A.base;
     const sign = v => (v > 0 ? '+' : '') + v;
@@ -361,7 +379,8 @@ function renderFeed(active) {
 
 // ---------- 렌더 ----------
 function renderVisible(active) {
-  if (tab === 'target') renderTarget(active);
+  if (tab === 'basic') renderBasic(active);
+  else if (tab === 'month') renderChips();
   else if (tab === 'result') renderResult();
   else if (tab === 'feed') renderFeed(active);
 }
@@ -414,7 +433,8 @@ $('#xlsx').onchange = async e => {
     farmNew.yieldRate = nv(b, 'C18') ?? 0.77;
     if (s) Object.assign(farmNew.sim, { msy: nv(s, 'C9'), price: nv(s, 'C11'), msyMin: nv(s, 'C18') ?? 22, msyStep: nv(s, 'C19') ?? 1, priceMin: nv(s, 'C20') ?? 5500, priceStep: nv(s, 'C21') ?? 100 });
     if (f) farmNew.feedStages = Array.from({ length: 9 }, (_, i) => { const r = i + 6; return { group: v(f, 'A' + r) || '', name: v(f, 'B' + r) || '', days: String(v(f, 'C' + r) || '').trim(), ton: nv(f, 'D' + r) || 0, price: nv(f, 'E' + r) || 0, std: nv(f, 'I' + r) || 0, product: v(f, 'J' + r) || '' }; });
-    if (!farmNew.months.sows.some(x => x != null)) throw new Error('상시모돈 값이 비어 있습니다.');
+    const D = fromMonths(farmNew); // 실적이 있으면 회색 칸(기본값)을 실적으로 계산, 없으면 엑셀 기본값 유지
+    if (D) Object.assign(farmNew, D, { baseSrc: '엑셀 월별 실적' });
     db.farms.push(farmNew); switchFarm(farmNew.id); toast(`「${farmNew.farm}」 엑셀 데이터를 불러왔습니다`);
   } catch (err) { alert('엑셀을 읽지 못했습니다: ' + (err.message || '양식을 확인하세요')); }
 };

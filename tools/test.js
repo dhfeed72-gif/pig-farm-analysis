@@ -3,7 +3,17 @@ const fs = require('fs'), path = require('path'), assert = require('assert');
 globalThis.window = {};
 eval(fs.readFileSync(path.join(__dirname, '..', 'sample.js'), 'utf8'));
 const C = require('../calc.js');
-const A = C.analyze(window.SAMPLE);
+// (1) 노란 셀만 입력 → 나머지는 기본값으로 계산 (엑셀 2번 시트 구조)
+const S = window.SAMPLE;
+const yellowOnly = { sim: S.sim };
+const A = C.analyze({ ...yellowOnly, months: S.months, yieldRate: S.yieldRate });
+// (2) 월별 실적으로 산출한 기준값 = 엑셀 회색 셀 = 기본값
+const D = C.fromMonths(S);
+for (const k in C.DEFAULT_BASE) assert(Math.abs(D.base[k] - C.DEFAULT_BASE[k]) < 1e-9, 'fromMonths base.' + k);
+for (const k in C.DEFAULT_COST) assert(Math.abs(D.cost[k] - C.DEFAULT_COST[k]) < 1e-6, 'fromMonths cost.' + k);
+const A2 = C.analyze({ ...S, ...D });
+assert.strictEqual(A2.tgt.profit, A.tgt.profit, 'monthly-derived == defaults');
+assert(C.analyze({ sim: S.sim }).tgt.profit === A.tgt.profit, 'no months at all');
 const near = (got, want, label) => { assert(Math.abs(got - want) <= Math.max(1e-6, Math.abs(want) * 1e-9), `${label}: ${got} != ${want}`); };
 const expect = {
   'base.sows': 275.25, 'base.msy': 25.9, 'base.price': 5741, 'base.liveWt': 116.23782114277691, 'base.fcr': 3.2108333333333334,
@@ -29,5 +39,6 @@ const z = C.feedSwitch(A, {}); assert.strictEqual(z.delta, 0, 'feedSwitch zero')
 const s = C.feedSwitch(A, { dPrice: 20, dFcr: -C.feedSwitch(A, { dPrice: 20 }).fcrNeeded });
 assert(Math.abs(s.delta) <= 1, 'feedSwitch break-even FCR offsets price: ' + s.delta);
 // 빈 데이터
-assert(C.analyze({ months: { sows: [] }, sim: {} }).empty, 'empty');
+assert(C.analyze({ base: { sows: 0 }, sim: {} }).empty, 'empty');
+assert(C.fromMonths({ months: { sows: [] } }) === null, 'no months');
 console.log('OK —', Object.keys(expect).length + 6, 'checks match the Excel model');

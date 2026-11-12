@@ -21,7 +21,7 @@
   };
 
   function monthly(s) {
-    const M = s.months, y = n(s.yieldRate);
+    const M = s.months || {}, y = n(s.yieldRate);
     const rows = [];
     let cum = 0;
     for (let i = 0; i < 12; i++) {
@@ -52,38 +52,53 @@
 
   const avgOf = (rows, k) => { const v = rows.map(r => r[k]).filter(has); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; };
 
-  function analyze(s) {
-    const rows = monthly(s), act = rows.filter(r => r.active);
-    if (!act.length) return { rows, empty: true };
+  // 기본값 = 원본 엑셀(2. 농장 가상 시뮬레이션 기초입력의 회색 셀, 1-1 두당 비용)의 값.
+  // 월별 실적이 없으면 이 값으로 계산하고, 실적을 입력하면 fromMonths()로 다시 산출할 수 있음.
+  const DEFAULT_BASE = { sows: 275.25, msy: 25.9, price: 5741, liveWt: 116.23782114277691, yieldRate: 0.77, fcr: 3.2108333333333334, feedPrice: 605.7890694402279 };
+  const DEFAULT_COST = { meds: 12393.009967710233, util: 20877.962936964763, otherVar: 63037.65913238804, labor: 34907.75712480696, depr: 0, repair: 0, interest: 12178.021760494174, otherFixed: 4006.340025270251 };
+
+  // 시트 1 → 시트 2 회색 셀 + 시트 1-1 두당 비용. 실적이 없으면 null.
+  function fromMonths(s) {
+    const act = monthly(s).filter(r => r.active);
+    if (!act.length) return null;
     const M = s.months, idx = act.map(r => r.month - 1);
     const sum = k => idx.reduce((a, i) => a + n(M[k][i]), 0);
     const sold = sum('sold');
     const perSold = k => div(sum(k), sold) || 0;
-    const y = n(s.yieldRate);
+    return {
+      base: {
+        sows: sum('sows') / act.length,
+        msy: roundDown(avgOf(act, 'msy'), 1),
+        price: roundUp(avgOf(act, 'price'), 0),
+        liveWt: div(sum('weight'), sold) || 0,
+        yieldRate: n(s.yieldRate),
+        fcr: avgOf(act, 'fcr'),
+        feedPrice: avgOf(act, 'feedPrice'),
+      },
+      cost: {
+        meds: perSold('meds'),
+        util: perSold('util'),
+        otherVar: perSold('semen') + perSold('breeding') + perSold('vehicle') + perSold('other') + perSold('manure'),
+        labor: perSold('labor') + perSold('ownerLabor'),
+        depr: perSold('depr'),
+        repair: perSold('repair'),
+        interest: perSold('interest'),
+        otherFixed: perSold('insurance'),
+      },
+    };
+  }
 
-    // 시트 2. 기준값
-    const base = {
-      sows: sum('sows') / act.length,
-      msy: roundDown(avgOf(act, 'msy'), 1),
-      price: roundUp(avgOf(act, 'price'), 0),
-      liveWt: div(sum('weight'), sold) || 0,
-      yieldRate: y,
-      fcr: avgOf(act, 'fcr'),
-      feedPrice: avgOf(act, 'feedPrice'),
-    };
+  // s.base / s.cost(없으면 기본값) + s.sim(노란 셀) → 분석 결과
+  function analyze(s) {
+    const rows = monthly(s), act = rows.filter(r => r.active);
+    const base = { ...DEFAULT_BASE, ...s.base }, cost = { ...DEFAULT_COST, ...s.cost };
+    for (const k in base) base[k] = n(base[k]);
+    for (const k in cost) cost[k] = n(cost[k]);
+    if (!base.sows || !base.msy || !base.liveWt || !base.yieldRate) return { rows, act, base, empty: true };
+    const y = base.yieldRate;
+
     // 시트 1-1. 두당 비용
-    const ph = {
-      feed: base.liveWt * base.fcr * base.feedPrice,
-      piglet: 0,
-      meds: perSold('meds'),
-      util: perSold('util'),
-      otherVar: perSold('semen') + perSold('breeding') + perSold('vehicle') + perSold('other') + perSold('manure'),
-      labor: perSold('labor') + perSold('ownerLabor'),
-      depr: perSold('depr'),
-      repair: perSold('repair'),
-      interest: perSold('interest'),
-      otherFixed: perSold('insurance'),
-    };
+    const ph = { feed: base.liveWt * base.fcr * base.feedPrice, piglet: 0, ...cost };
     ph.varTotal = ph.feed + ph.piglet + ph.meds + ph.util + ph.otherVar;
     ph.fixedTotal = ph.labor + ph.depr + ph.repair + ph.interest + ph.otherFixed;
     const fixedAnnual = ph.fixedTotal * base.sows * base.msy;
@@ -161,6 +176,6 @@
 
   const fmt = (v, d = 0) => (v == null || !isFinite(v) ? '–' : v.toLocaleString('ko-KR', { maximumFractionDigits: d, minimumFractionDigits: d }));
 
-  const api = { analyze, monthly, feedSwitch, feedStages, alerts, roundUp, roundDown, fmt, BENCH };
+  const api = { analyze, fromMonths, DEFAULT_BASE, DEFAULT_COST, monthly, feedSwitch, feedStages, alerts, roundUp, roundDown, fmt, BENCH };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Calc = api;
 })(typeof window !== 'undefined' ? window : globalThis);

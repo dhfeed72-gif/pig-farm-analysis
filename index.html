@@ -61,6 +61,7 @@ h2 { font-size:1.05rem; margin:0 0 4px; } h3 { font-size:.95rem; margin:16px 0 8
 .btn.sm { padding:4px 10px; font-size:.85rem; }
 label.f { display:flex; flex-direction:column; gap:3px; font-size:.85rem; color:var(--ink-2); }
 input.in, select.in { font:inherit; width:100%; padding:8px 10px; border:1px solid var(--input-line); background:var(--input); color:var(--ink); border-radius:6px; min-width:0; }
+input.in.def { background:var(--surface-2); border-color:var(--line); }
 input.in:focus, select.in:focus { outline:2px solid var(--s1); outline-offset:1px; }
 .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); }
 .unit { color:var(--ink-3); font-size:.8rem; }
@@ -120,7 +121,7 @@ table.edit td:first-child { position:sticky; left:0; background:var(--surface); 
 @media print {
   @page { size:A4; margin:12mm; }
   body { background:#fff; color:#000; font-size:11px; padding:0; }
-  header.top, nav.tabs, .no-print, #p-input, #p-target { display:none !important; }
+  header.top, nav.tabs, .no-print, #p-basic, #p-month { display:none !important; }
   .panel { display:block !important; }
   .print-only { display:block; }
   section.card { border:1px solid #bbb; break-inside:avoid; margin-top:8px; padding:10px; }
@@ -140,10 +141,10 @@ table.edit td:first-child { position:sticky; left:0; background:var(--surface); 
 </header>
 
 <nav class="tabs" role="tablist">
-  <button role="tab" data-tab="input" aria-selected="true"><span class="ic">✎</span>① 농장 입력</button>
-  <button role="tab" data-tab="target"><span class="ic">🎯</span>② 목표 설정</button>
-  <button role="tab" data-tab="result"><span class="ic">📊</span>③ 분석 결과</button>
-  <button role="tab" data-tab="feed"><span class="ic">🌾</span>④ 사료 컨설팅</button>
+  <button role="tab" data-tab="basic" aria-selected="true"><span class="ic">✎</span>① 기본 입력</button>
+  <button role="tab" data-tab="result"><span class="ic">📊</span>② 분석 결과</button>
+  <button role="tab" data-tab="feed"><span class="ic">🌾</span>③ 사료 컨설팅</button>
+  <button role="tab" data-tab="month"><span class="ic">🗓</span>④ 월별 실적</button>
 </nav>
 
 <main>
@@ -151,29 +152,81 @@ table.edit td:first-child { position:sticky; left:0; background:var(--surface); 
   <div class="pr-head"><div><h2 id="prTitle"></h2><p class="sub" id="prSub" style="margin:0"></p></div><img src="ci.png" alt="대한사료"></div>
 </div>
 
-<!-- ① 입력 -->
-<div class="panel on" id="p-input" role="tabpanel">
+<!-- ① 기본 입력: 노란 칸만 입력하면 분석 -->
+<div class="panel on" id="p-basic" role="tabpanel">
   <section class="card">
-    <h2>농장 정보</h2>
-    <p class="sub">노란 칸에 입력하세요. 입력 내용은 이 기기에 자동 저장됩니다.</p>
+    <h2>노란 칸만 입력하세요</h2>
+    <p class="sub">나머지 값은 아래 기본값으로 자동 계산됩니다. 입력 내용은 이 기기에 자동 저장됩니다.</p>
     <div class="grid">
       <label class="f">농장명<input class="in" data-k="farm"></label>
+      <label class="f">시뮬레이션 MSY <span class="unit">(두/모돈/년)</span><input class="in" data-s="msy" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">시뮬레이션 돈가 <span class="unit">(원/kg, 지육)</span><input class="in" data-s="price" type="number" inputmode="numeric" step="10"></label>
+    </div>
+    <h3>민감도표 범위</h3>
+    <div class="grid">
+      <label class="f">최소 MSY<input class="in" data-s="msyMin" type="number" inputmode="decimal" step="0.5"></label>
+      <label class="f">MSY 간격<input class="in" data-s="msyStep" type="number" inputmode="decimal" step="0.5"></label>
+      <label class="f">최소 돈가<input class="in" data-s="priceMin" type="number" inputmode="numeric" step="100"></label>
+      <label class="f">돈가 간격<input class="in" data-s="priceStep" type="number" inputmode="numeric" step="50"></label>
+    </div>
+    <div class="kpis" id="quickKpis" style="margin-top:14px"></div>
+    <div class="row" style="margin-top:14px"><button class="btn" data-go="result" type="button">분석 결과 보기 →</button></div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <h2>기본값 <span class="unit" id="baseSrc"></span></h2>
+      <button class="btn sm ghost" id="resetBase" type="button">엑셀 기본값으로 되돌리기</button>
+    </div>
+    <p class="sub">회색 칸은 기본값입니다. 농장 자료를 알면 바꿔 넣으세요. ④ 월별 실적을 입력하면 실적으로 다시 계산할 수도 있습니다.</p>
+    <div class="grid">
+      <label class="f">상시 모돈수 <span class="unit">(두)</span><input class="in def" data-b="sows" type="number" inputmode="decimal"></label>
+      <label class="f">기준 MSY <span class="unit">(두/모돈/년)</span><input class="in def" data-b="msy" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">기준 돈가 <span class="unit">(원/kg)</span><input class="in def" data-b="price" type="number" inputmode="numeric" step="10"></label>
+      <label class="f">평균 생체중 <span class="unit">(kg/두)</span><input class="in def" data-b="liveWt" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">지육율 <span class="unit">(%)</span><input class="in def" data-b="yieldPct" type="number" inputmode="decimal" step="0.1"></label>
+      <label class="f">FCR <span class="unit">(kg/kg)</span><input class="in def" data-b="fcr" type="number" inputmode="decimal" step="0.01"></label>
+      <label class="f">평균 사료단가 <span class="unit">(원/kg)</span><input class="in def" data-b="feedPrice" type="number" inputmode="numeric"></label>
+    </div>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:var(--ink-2)">두당 비용 기본값 (원/두) — 사료비는 생체중×FCR×사료단가로 자동 계산</summary>
+      <div class="grid" style="margin-top:10px">
+        <label class="f">약품·방역비<input class="in def" data-pc="meds" type="number" inputmode="numeric"></label>
+        <label class="f">수도광열·유류비<input class="in def" data-pc="util" type="number" inputmode="numeric"></label>
+        <label class="f">기타 변동비 <span class="unit">(종돈·정액·분뇨·차량·기타)</span><input class="in def" data-pc="otherVar" type="number" inputmode="numeric"></label>
+        <label class="f">인건비 <span class="unit">(직원+자가)</span><input class="in def" data-pc="labor" type="number" inputmode="numeric"></label>
+        <label class="f">감가상각비<input class="in def" data-pc="depr" type="number" inputmode="numeric"></label>
+        <label class="f">수선비<input class="in def" data-pc="repair" type="number" inputmode="numeric"></label>
+        <label class="f">이자비용<input class="in def" data-pc="interest" type="number" inputmode="numeric"></label>
+        <label class="f">기타 고정비 <span class="unit">(보험료)</span><input class="in def" data-pc="otherFixed" type="number" inputmode="numeric"></label>
+      </div>
+    </details>
+    <label class="f" style="margin-top:12px;max-width:340px">담당 컨설턴트 <span class="unit">(보고서에 표시)</span><input class="in def" data-k="consultant"></label>
+  </section>
+</div>
+
+<!-- ④ 월별 실적 (선택) -->
+<div class="panel" id="p-month" role="tabpanel">
+  <section class="card">
+    <h2>월별 실적 <span class="unit">(선택)</span></h2>
+    <p class="sub">실적을 입력하면 월별 추이·점검이 필요한 달이 분석 결과에 추가되고, 아래 버튼으로 기본값을 실적 기준으로 다시 계산할 수 있습니다.</p>
+    <div class="grid">
       <label class="f">분석 연도<input class="in" data-k="year" type="number" inputmode="numeric"></label>
       <label class="f">지육율 (%)<input class="in" data-k="yieldPct" type="number" inputmode="decimal" step="0.1"></label>
-      <label class="f">담당 컨설턴트<input class="in" data-k="consultant" placeholder="보고서에 표시"></label>
     </div>
     <div class="row" style="margin-top:12px">
+      <button class="btn" id="applyMonths" type="button">이 실적으로 기본값 계산 적용</button>
       <label class="btn ghost">📂 엑셀 불러오기<input type="file" id="xlsx" accept=".xlsx,.xlsm,.xls" hidden></label>
       <button class="btn ghost" id="loadSample" type="button">예시 데이터 채우기</button>
       <button class="btn ghost" id="expJson" type="button">백업 저장</button>
       <label class="btn ghost">백업 복원<input type="file" id="impJson" accept=".json" hidden></label>
     </div>
-    <p class="note">엑셀 불러오기: 기존 「양돈농장 수익 비용구조 시뮬레이션」 엑셀 파일의 노란 셀(1. 기초입력·2. 시뮬레이션·1-2. 사료구간)을 그대로 읽어 새 농장으로 추가합니다.</p>
+    <p class="note">엑셀 불러오기: 기존 「양돈농장 수익 비용구조 시뮬레이션」 엑셀의 노란 셀(1. 기초입력·2. 시뮬레이션·1-2. 사료구간)을 읽어 새 농장으로 추가하고, 실적으로 기본값을 계산합니다.</p>
   </section>
 
   <section class="card">
     <div class="row" style="justify-content:space-between">
-      <h2>월별 실적</h2>
+      <h2>월별 입력</h2>
       <div class="row desk-only">
         <button class="btn sm" id="viewMonth" type="button">월별 입력</button>
         <button class="btn sm ghost" id="viewTable" type="button">표 입력 (12개월)</button>
@@ -185,37 +238,6 @@ table.edit td:first-child { position:sticky; left:0; background:var(--surface); 
       <div id="monthFields"></div>
     </div>
     <div id="tableView" class="scroll" hidden></div>
-  </section>
-</div>
-
-<!-- ② 목표 -->
-<div class="panel" id="p-target" role="tabpanel">
-  <section class="card">
-    <h2>현재 기준값 <span class="unit">(월별 실적에서 자동 계산)</span></h2>
-    <div class="kpis" id="baseKpis"></div>
-  </section>
-  <section class="card">
-    <h2>목표 시나리오</h2>
-    <p class="sub">목표 MSY와 예상 돈가를 넣으면 손익 변화를 바로 계산합니다.</p>
-    <div class="two">
-      <div>
-        <label class="f">목표 MSY (두/모돈/년)<input class="in" data-s="msy" type="number" inputmode="decimal" step="0.1"></label>
-        <input class="slider" type="range" min="15" max="35" step="0.1" data-s="msy" aria-label="목표 MSY 슬라이더">
-      </div>
-      <div>
-        <label class="f">예상 돈가 (원/kg, 지육)<input class="in" data-s="price" type="number" inputmode="numeric" step="10"></label>
-        <input class="slider" type="range" min="3000" max="8000" step="10" data-s="price" aria-label="예상 돈가 슬라이더">
-      </div>
-    </div>
-    <div class="kpis" id="quickKpis" style="margin-top:14px"></div>
-    <h3>민감도표 범위</h3>
-    <div class="grid">
-      <label class="f">시작 MSY<input class="in" data-s="msyMin" type="number" step="0.5"></label>
-      <label class="f">MSY 간격<input class="in" data-s="msyStep" type="number" step="0.5"></label>
-      <label class="f">시작 돈가<input class="in" data-s="priceMin" type="number" step="100"></label>
-      <label class="f">돈가 간격<input class="in" data-s="priceStep" type="number" step="50"></label>
-    </div>
-    <div class="row" style="margin-top:14px"><button class="btn" data-go="result" type="button">분석 결과 보기 →</button></div>
   </section>
 </div>
 
@@ -231,7 +253,7 @@ table.edit td:first-child { position:sticky; left:0; background:var(--surface); 
 <div class="panel" id="p-feed" role="tabpanel">
   <section class="card">
     <h2>사료 전환 효과 시뮬레이터</h2>
-    <p class="sub">제안 사료로 바꿀 때 단가가 올라도 FCR·MSY·출하체중 개선으로 이익이 나는지 계산합니다 (목표 시나리오 기준, 연간).</p>
+    <p class="sub">제안 사료로 바꿀 때 단가가 올라도 FCR·MSY·출하체중 개선으로 이익이 나는지 계산합니다 (시뮬레이션 시나리오 기준, 연간).</p>
     <div class="grid no-print">
       <label class="f">사료단가 변화 (원/kg)<input class="in" data-w="dPrice" type="number" inputmode="numeric" step="5"></label>
       <label class="f">FCR 변화 (예: −0.1)<input class="in" data-w="dFcr" type="number" inputmode="decimal" step="0.01"></label>

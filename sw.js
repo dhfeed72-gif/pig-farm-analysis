@@ -1,5 +1,5 @@
 // 오프라인 지원: 항상 최신 파일을 먼저 받고(네트워크 우선), 연결이 없을 때만 캐시 사용.
-const CACHE = 'pigfarm-v2';
+const CACHE = 'pigfarm-v3';
 const SHELL = ['./', 'index.html', 'app.js', 'calc.js', 'sample.js', 'ci.png', 'ci_white.png', 'icon-192.png', 'manifest.webmanifest',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
